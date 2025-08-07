@@ -1,7 +1,8 @@
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlalchemy import and_
 
 
 
@@ -62,12 +63,43 @@ async def getBooks(
     session : SessionDep,
     offset : int = 0,
     limit : Annotated[int, Query(le=100)] = 100,
-) -> list[Book]:
-    
-    books = session.exec(select(Book).offset(offset).limit(limit)).all()
 
-    return books
+    # search and filter parameter
+
+    name: Optional[str] = Query(None, description="Search by book name (partial match)"),
+    author: Optional[str] = Query(None, description="Filter by exact author name"),
+    min_year: Optional[int] = Query(None, description="Minimum publication year"),
+    max_year: Optional[int] = Query(None, description="Maximum publication year")
+    ) -> list[Book]:
     
+
+    # getting books with optional search and  filtering
+
+    query = select(Book)
+
+    filters = []
+
+    if name:
+        filters.append(Book.name.ilike(f"%{name}%"))
+                       
+    if author:
+        filters.append(Book.author == author)
+
+    if min_year is not None:
+        filters.append(Book.year >= min_year)
+    if max_year is not None:
+        filters.append(Book.year <= max_year)
+
+    # Combine all filters with AND logic
+    if filters:
+        query = query.where(and_(*filters))
+
+
+     # Apply pagination
+    books = session.exec(query.offset(offset).limit(limit)).all()
+    return books
+
+
 @app.get("/books/{book_id}")
 async def getBookById(book_id : int, session : SessionDep) -> Book:
 
@@ -78,7 +110,7 @@ async def getBookById(book_id : int, session : SessionDep) -> Book:
 
     return book
 
-@app.delete("/book/{book_id}")
+@app.delete("/books/{book_id}")
 async def deleteBook(book_id :int, session:SessionDep) -> Book:
 
     book = session.get(Book, book_id)
