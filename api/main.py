@@ -121,8 +121,12 @@ async def get_current_active_user(
     return current_user
 
 
-
 # Creating a Model
+
+class BookCreate(SQLModel):
+    name: str
+    author: str
+    year: int
 
 class Book(SQLModel, table=True):
     id : int | None = Field(default=None, primary_key=True)
@@ -199,14 +203,20 @@ async def create_user(user: UserCreate, session: SessionDep):
 
 @app.post('/books/')
 async def create_books(
-    book: Book,
+    book_data: BookCreate,
     session: SessionDep,
     current_user: Annotated[User, Depends(get_current_active_user)]
 ) -> Book:
-    session.add(book)
+    """
+    Create a new book (ID will be automatically assigned)
+    """
+    # Convert BookCreate to Book (ID will be auto-generated)
+    db_book = Book.from_orm(book_data)
+    
+    session.add(db_book)
     session.commit()
-    session.refresh(book)
-    return book
+    session.refresh(db_book)
+    return db_book
 
 
 @app.get('/books/')
